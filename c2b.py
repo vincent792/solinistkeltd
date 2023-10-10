@@ -1,5 +1,5 @@
 import requests
-from requests.auth import HTTPBasicAuth
+
 import keys
 
 from access_token import get_access_token
@@ -31,7 +31,7 @@ def simulate_c2b_transaction():
     request_data = {
         "ShortCode": keys.shortcode,
         "CommandID": "CustomerPayBillOnline",
-        "Amount": "4",
+        "Amount": "2",
         "Msisdn": keys.test_msisdn,
         "BillRefNumber": "12345678",
     }
