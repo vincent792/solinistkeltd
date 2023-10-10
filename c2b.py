@@ -1,62 +1,42 @@
 import requests
 from requests.auth import HTTPBasicAuth
-
-
 import keys
 
+from access_token import get_access_token
+
+def make_api_request(url, request_data, access_token):
+    headers = {"Authorization": "Bearer %s" % access_token}
+    try:
+        response = requests.post(url, json=request_data, headers=headers)
+        print(response.text)
+    except:
+        response = requests.post(url, json=request_data, headers=headers, verify=False)
+        print(response.text)
+
 def register_url():
-
-    # Access token
-    consumer_key = keys.consumer_key
-    consumer_secret = keys.consumer_secret
-    api_URL = "https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials"
-    r = requests.get(api_URL, auth=HTTPBasicAuth(consumer_key, consumer_secret))
-    json_response = r.json()
-    my_access_token = json_response['access_token']
-    # print(my_access_token)
-
+    access_token = get_access_token()
     api_url = "https://sandbox.safaricom.co.ke/mpesa/c2b/v1/registerurl"
-
-    headers = {"Authorization": "Bearer %s" % my_access_token}
-
-    request = {
+    request_data = {
         "ShortCode": keys.shortcode,
         "ResponseType": "Completed",
-        "ConfirmationURL": "https://django-mpesa-vincent792.vercel.app/api/c2b-confirmation/",
-        "ValidationURL":   "https://django-mpesa-vincent792.vercel.app/api/lipanampesa/c2b-validation/",
+        "ConfirmationURL": "https://solinistkeltd-vincent792.vercel.app/api/c2b-confirmation/",
+        "ValidationURL": "https://solinistkeltd-vincent792.vercel.app/api/c2b-validation/",
     }
+    make_api_request(api_url, request_data, access_token)
+# register_url()
 
-    
-    response = requests.post(api_url, json=request, headers=headers)
-   
+def simulate_c2b_transaction():
+    access_token = get_access_token()
+    api_url = "https://sandbox.safaricom.co.ke/mpesa/c2b/v1/simulate"
+    request_data = {
+        "ShortCode": keys.shortcode,
+        "CommandID": "CustomerPayBillOnline",
+        "Amount": "4",
+        "Msisdn": keys.test_msisdn,
+        "BillRefNumber": "12345678",
+    }
+    make_api_request(api_url, request_data, access_token)
 
-    print(response.text)
+# Call the functions to perform the actions
 
-
-register_url()
-
-
-# def simulate_c2b_transaction():
-#     my_access_token = generate_access_token()
-
-#     api_url = "https://sandbox.safaricom.co.ke/mpesa/c2b/v1/simulate"
-
-#     headers = {"Authorization": "Bearer %s" % my_access_token}
-
-#     request = {
-#         "ShortCode": keys.shortcode,
-#         "CommandID": "CustomerPayBillOnline",
-#         "Amount": "4",
-#         "Msisdn": keys.test_msisdn,
-#         "BillRefNumber": "myaccnumber",
-#     }
-#     try:
-#         response = requests.post(api_url, json=request, headers=headers)
-
-#     except:
-#         response = requests.post(api_url, json=request, headers=headers, verify=False)
-
-#     print(response.text)
-
-
-# simulate_c2b_transaction()
+simulate_c2b_transaction()

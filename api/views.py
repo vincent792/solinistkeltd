@@ -4,12 +4,13 @@ from api import keys
 # views.py
 from django.shortcuts import render, redirect
 
-from .models import UserProfile
+from .models import C2BPayments,LNMOnline
 from requests.auth import HTTPBasicAuth
 from datetime import datetime
 import base64
 import requests
 
+from access_token import get_access_token
 
 
 def payment(request):
@@ -17,69 +18,68 @@ def payment(request):
     return render(request, 'payment.html')
 
 
+
+
+def generate_timestamp():
+    unformatted_date = datetime.now()
+    formatted_date = unformatted_date.strftime('%Y%m%d%H%M%S')
+    return formatted_date
+
+def encode_password(shortcode, passkey, timestamp):
+    data_to_encode = (shortcode + passkey + timestamp)
+    encoded_string = base64.b64encode(data_to_encode.encode()).decode("utf-8")
+    return encoded_string
+
+
+
 def initiate_stk_push(request):
-    if  request.method=='POST':
-        phone_number=request.POST['phone_number']
-        Amount=request.POST['amount']
-        print(phone_number)
-           # Check if the phone_number is 10 characters long
+    if request.method == 'POST':
+        phone_number = request.POST.get('phone_number')
+        amount = request.POST.get('amount')
+
+        # Check if the phone_number is 10 characters long
         if len(phone_number) == 10:
             # Remove the starting zero and add "+254" at the beginning
             phone = '254' + phone_number[1:]
             print(phone)
         else:
             print("Invalid number")
+            return
 
-        try:     
-
-            # Working on the timestamp
-            unformatted_date = datetime.now()
-            formatted_date = unformatted_date.strftime('%Y%m%d%H%M%S')
-
-            # Password
-            data_to_encode = (
-                keys.shortCode + keys.passkey + formatted_date
-            )
-
-            encoded_string = base64.b64encode(data_to_encode.encode())
-            decoded_password = encoded_string.decode("utf-8")
-
-            # Access token
-            consumer_key = keys.consumer_key
-            consumer_secret = keys.consumer_secret
-            api_URL = "https://sandbox.safaricom.co.ke/oauth/v1/generate?grant_type=client_credentials"
-            r = requests.get(api_URL, auth=HTTPBasicAuth(consumer_key, consumer_secret))
-            json_response = r.json()
-            my_access_token = json_response['access_token']
+        try:
+            timestamp = generate_timestamp()
+            password = encode_password(keys.shortCode, keys.passkey, timestamp)
+            access_token = get_access_token()
 
             # STK Push Request
             api_url = "https://sandbox.safaricom.co.ke/mpesa/stkpush/v1/processrequest"
             headers = {
-                "Authorization": "Bearer %s" % my_access_token
+                "Authorization": "Bearer %s" % access_token
             }
             request_data = {
                 "BusinessShortCode": keys.shortCode,
-                "Password": decoded_password,
-                "Timestamp": formatted_date,
+                "Password": password,
+                "Timestamp": timestamp,
                 "TransactionType": "CustomerPayBillOnline",
-                "Amount": Amount,
+                "Amount": amount,
                 "PartyA": phone,  # Use the user's phone number
                 "PartyB": keys.shortCode,
                 "PhoneNumber": phone,  # Use the user's phone number
-                "CallBackURL": "https://django-mpesa-vincent792.vercel.app/api/lipanampesa/",
+                "CallBackURL": "https://solinistkeltd-vincent792.vercel.app/api/lipanampesa/",
                 "AccountReference": "test",
                 "TransactionDesc": "test"
             }
 
             response = requests.post(api_url, json=request_data, headers=headers)
             response_data = response.json()
-            print(response_data)      
+            print(response_data)
 
             return redirect('payment_success')  # Redirect to a payment success page
-        except UserProfile.DoesNotExist:
-            return render(request, 'error.html', {'error_message': 'User profile not found'})
         except Exception as e:
             return render(request, 'error.html', {'error_message': str(e)})
+
+    return render(request, 'error.html', {'error_message': 'Invalid request method'})
+
 
 
 def payment_success(request):
@@ -96,6 +96,7 @@ from rest_framework.permissions import AllowAny
 
 from .models import LNMOnline
 from api.serializer import LNMOnlineSerializer
+from rest_framework import serializers
 
 
 class LNMCallbackUrlAPIView(CreateAPIView):
@@ -163,5 +164,75 @@ class LNMCallbackUrlAPIView(CreateAPIView):
         from rest_framework.response import Response
 
         return Response({"OurResultDesc": "YEEY!!! It worked!"})
+
+class C2BPaymentSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = C2BPayments
+        fields = ("id",
+        "TransactionType",
+        "TransID",
+        "TransTime",
+        "TransAmount",
+        "BusinessShortCode",
+        "BillRefNumber",
+        "InvoiceNumber",
+        "OrgAccountBalance",
+        "ThirdPartyTransID",
+        "MSISDN",
+        "FirstName",
+        "MiddleName",
+        "LastName",
+        )
+
+
+
+
+class C2BValidationAPIView(CreateAPIView):
+    queryset = C2BPayments.objects.all()
+    serializer_class = C2BPaymentSerializer
+    permission_classes = [AllowAny]
+
+    # def create(self, request):
+    #     print(request.data, "this is request.data in Validation")
+
+    #     from rest_framework.response import Response
+    #     my_headers = self.get_success_headers(request.data)
+
+    #     return Response({
+    #         "ResultCode": 1,
+    #         "ResponseDesc":"Failed!"
+    #     },
+    #     headers=my_headers)
+
+class C2BConfirmationAPIView(CreateAPIView):
+    queryset = C2BPayments.objects.all()
+    serializer_class = C2BPaymentSerializer
+    permission_classes = [AllowAny]
+
+    # def create(self, request):
+    #     print(request.data, "this is request.data in Confirmation")
+
+    #     """
+    #     {'TransactionType': 'Pay Bill', 
+    #     'TransID': 'NCQ61H8BK4',
+    #      'TransTime': '20190326210441',
+    #       'TransAmount': '2.00', 
+    #       'BusinessShortCode': '601445',
+    #        'BillRefNumber': '12345678', 
+    #        'InvoiceNumber': '', 
+    #        'OrgAccountBalance': '18.00', 
+    #        'ThirdPartyTransID': '', 
+    #        'MSISDN': '254708374149', 
+    #        'FirstName': 'John', 
+    #        'MiddleName': 'J.', 
+    #        'LastName': 'Doe'
+    #        } 
+    #        this is request.data in Confirmation
+    #        """
+
+
+    #     from rest_framework.response import Response
+
+    #     return Response({"ResultDesc": 0})
 
 
